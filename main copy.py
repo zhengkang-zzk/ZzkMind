@@ -7,36 +7,40 @@ from dataset.loader import LMDataset
 from model.ZzkModel import ZzkModel
 
 
-
 def main():
     config = load_config("configs/tiny.yaml")
 
-    train_text = load_text(config.data.train_path)
-    train_text = train_text * 10
+    text = load_text(config.data.train_path)
+    text = text * 10
+    tokenizer = CharTokenizer(text)
+    encoded = tokenizer.encode(text)
 
-    tokenizer = CharTokenizer(train_text)
+    config.model.vocab_size = tokenizer.vocab_size
 
-
-    encoded = tokenizer.encode(train_text)
-
-    train_dataset = LMDataset(
+    dataset = LMDataset(
         tokens=encoded,
         seq_len=config.model.max_position_embeddings
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=config.train.batch_size)
-    model = ZzkModel(config.model)
+    loader = DataLoader(
+        dataset,
+        batch_size=2,
+        shuffle=False
+    )
 
-    print("===开始第一次前向传播===")
-    for batch_x, batch_y in train_loader:
-        print(batch_x.shape)
+    model = ZzkModel(config.model)
+    model.eval()
+
+    batch_x, batch_y = next(iter(loader))
+
+    print("batch_x shape:", batch_x.shape)
+    print("batch_y shape:", batch_y.shape)
+
+    with torch.no_grad():
         logits = model(batch_x)
-        
-        print(f"输出 Logits 的形状: {logits.shape}") 
-        # 预期: (batch_size, seq_len, vocab_size)
-        print(batch_y.shape)
-        break
-    
+
+    print("logits shape:", logits.shape)
+    print("expected shape:", (batch_x.size(0), batch_x.size(1), config.model.vocab_size))
 
 
 if __name__ == "__main__":

@@ -1,54 +1,102 @@
-# 🧠 ZzkMind
+# ZzkMind
 
-一个基于 PyTorch 的极简大语言模型学习项目。本项目参考 MiniMind，旨在从零开始、不依赖庞大的第三方库，手写实现一个最小可运行的 LLM 训练与推理流程，深入理解大模型的底层逻辑。
+一个基于 PyTorch、从零实现的 Decoder-only 小型大语言模型项目。
 
-## 🎯 项目愿景
+## 项目简介
 
-化繁为简，剥离工业级框架的冗余代码，用最清晰的结构呈现大模型（Decoder-only）的心脏：**数据流转、因果自注意力机制（Causal Self-Attention）以及自回归训练循环。**
+ZzkMind 是一个从零实现的小型大语言模型项目，目标是逐步复现 LLM 的核心组成，包括：
 
-## 🚀 进展与路线图 (Roadmap)
+- tokenizer
+- dataset / dataloader
+- embedding
+- self-attention
+- FFN
+- normalization
+- training
+- generation
 
-### 🟢 阶段一：基础设施与数据流 (已完成)
-- [x] **配置管理**: 实现基于 `YAML` + `dataclass` 的强类型配置系统 (`config.py`)。
-- [x] **极简分词器**: 实现 `CharTokenizer`，支持动态从训练语料构建无 OOV 的专属字符级词表。
-- [x] **因果语言模型数据集**: 实现 `LMDataset`，基于滑动窗口策略自动构建 $X$ (输入) 和 $Y$ (偏移 1 位的标签)，完美对接 PyTorch `DataLoader`。
+当前项目已经完成了字符级 tokenizer、语言模型数据集构造、Input Embedding、Multi-Head Self-Attention、FeedForward、RMSNorm、TransformerBlock，以及模型前向传播测试。
 
-### 🟡 阶段二：模型核心骨架 (进行中)
-- [x] **嵌入层**: 实现 Token Embedding 与绝对位置编码 (Positional Encoding) 的融合。
-- [x] **多头注意力机制**: 手写 `CausalSelfAttention`，精准实现 QKV 切分矩阵乘法与基于 `masked_fill` 的下三角因果掩码 (防止穿越偷看未来 Token)。
-- [x] **线性输出头**: 实现 `LM Head`，将高维隐藏状态映射回词表概率分布 (Logits)。
-- [ ] **前馈神经网络**: 实现 `FeedForward` 模块。
-- [ ] **Transformer 组装**: 整合 Attention、FFN 与 RMSNorm/LayerNorm，搭建完整的 `TransformerBlock`。
+后续将继续补齐训练闭环、文本生成，以及更高级的扩展能力，如 RoPE、MoE、SFT 和 RLHF。
 
-### ⚪ 阶段三：训练与推理 (待启动)
-- [ ] **Trainer 训练器**: 实现基于 `CrossEntropyLoss` 的前向/反向传播与梯度更新。
-- [ ] **过拟合测试**: 在极小批量数据上验证 Loss 迅速下降至 0，确保模型架构无 Bug。
-- [ ] **文本生成**: 实现基于 `Top-K` 或 `Temperature` 采样的自回归文本生成 (Next-token prediction)。
+---
 
-## 📂 项目结构
+## 当前进度
 
-\`\`\`text
+### 已完成
+- [x] 字符级 Tokenizer
+- [x] 语言模型数据集构造（next-token prediction）
+- [x] Input Embedding（Token Embedding + Position Embedding）
+- [x] Multi-Head Self-Attention
+- [x] Causal Mask
+- [x] FeedForward Network
+- [x] RMSNorm
+- [x] TransformerBlock（Pre-Norm + Residual）
+- [x] ZzkModel 主干组装
+- [x] 前向传播 Shape 测试
+
+### 进行中
+- [ ] Training Loop
+- [ ] Cross Entropy Loss
+- [ ] 小数据集过拟合测试
+- [ ] 文本生成（Generate）
+
+### 计划中
+- [ ] RoPE
+- [ ] 更好的 Tokenizer（BPE / SentencePiece）
+- [ ] Checkpoint 保存与加载
+- [ ] 评测脚本
+- [ ] MoE
+- [ ] SFT / RLHF
+
+---
+
+## 项目结构
+
+```text
 ZzkMind/
-├─ configs/
-│  └─ tiny.yaml         # 极简模型架构与训练参数配置
-├─ dataset/
-│  ├─ text_dataset.py   # 纯文本读取加载
-│  ├─ tokenizer.py      # CharTokenizer 字符级分词器
-│  └─ loader.py         # LMDataset 与张量切片逻辑
-├─ model/
-│  └─ ZzkModel.py       # 模型核心组件 (Attention, Embedding, Head 等)
-├─ trainer/             # 训练循环控制 (TODO)
-├─ scripts/             # 评测与生成脚本 (TODO)
-├─ out/                 # 模型权重与日志输出目录
-├─ config.py            # 配置解析入口
-├─ main.py              # 项目主入口与联调测试脚本
-├─ pyproject.toml
-└─ README.md
-\`\`\`
+├── config/
+├── configs/
+│   └── tiny.yaml
+├── data/
+├── dataset/
+│   ├── tokenizer.py
+│   ├── loader.py
+│   └── text_dataset.py
+├── model/
+│   └── ZzkModel.py
+├── debug.py
+├── main.py
+└── README.md
 
-## 🛠️ 快速测试
 
-目前项目已打通“数据加载 -> 模型前向传播”的测试链路。你可以运行 `main.py` 观察张量在模型内部的形状变换：
+## 核心模块说明
 
-```bash
-python main.py
+
+- **CharTokenizer**: builds a character-level vocabulary from raw text and provides `encode/decode`.
+- **LMDataset**: constructs next-token prediction samples using a sliding window.
+- **InputEmbedding**: combines token embedding and positional embedding.
+- **SelfAttention**: implements causal multi-head self-attention.
+- **FeedForward**: position-wise MLP for token-wise nonlinear transformation.
+- **RMSNorm**: normalization over hidden dimensions.
+- **TransformerBlock**: Pre-Norm residual block combining attention and FFN.
+- **ZzkModel**: stacks multiple Transformer blocks and projects to vocabulary logits.
+
+## 一个最小示例
+README 里放一小段最小测试代码会很加分。
+
+```md
+## Example
+
+```python
+import torch
+from config import load_config
+from model.ZzkModel import ZzkModel
+
+config = load_config("configs/tiny.yaml")
+model = ZzkModel(config.model)
+
+idx = torch.randint(0, config.model.vocab_size, (2, 8), dtype=torch.long)
+logits = model(idx)
+
+print(logits.shape)
