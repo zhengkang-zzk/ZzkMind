@@ -121,6 +121,8 @@ def main():
     global_step = 0
     best_val_loss = float("inf")
 
+
+
     # 9. 训练循环
     for epoch in range(num_epochs):
         model.train()
@@ -148,11 +150,6 @@ def main():
             train_running_loss += loss.item()
             global_step += 1
 
-            if step % log_interval == 0:
-                print(
-                    f"epoch={epoch} step={step}/{len(train_loader)-1} "
-                    f"global_step={global_step} train_loss={loss.item():.6f}"
-                )
 
         # 10. 统计 train loss
         avg_train_loss = train_running_loss / len(train_loader)
@@ -160,6 +157,8 @@ def main():
 
         # 11. 计算 val loss
         avg_val_loss, val_ppl = evaluate(model, val_loader, device)
+
+
 
         print(
             f"[epoch {epoch}] "
@@ -204,6 +203,21 @@ def main():
                 best_ckpt,
             )
             print(f"best checkpoint updated: {best_ckpt}")
+
+    tokenizer_name = "xlm-roberta-base-local"
+
+    rope_scaling = getattr(config.model, "rope_scaling", None)
+    if rope_scaling is None:
+        position_type = "rope"
+    else:
+        position_type = "rope+yarn"
+    
+    print(
+        f"[summary] tokenizer={tokenizer_name}, position={position_type}, "
+        f"seq_len={seq_len}, hidden_size={config.model.hidden_size}, "
+        f"layers={config.model.num_hidden_layers}, "
+        f"train_loss={avg_train_loss:.4f}, val_loss={avg_val_loss:.4f}, val_ppl={val_ppl:.4f}"
+    )
 
 
 if __name__ == "__main__":
