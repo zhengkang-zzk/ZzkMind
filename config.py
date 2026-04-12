@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import yaml
-
+from typing import Optional
 
 @dataclass
 class ModelConfig:
@@ -13,13 +13,20 @@ class ModelConfig:
     max_position_embeddings: int
     dropout: float
 
+    rope_base: float 
+    rope_scaling: Optional[dict]
+
 
 @dataclass
 class TrainConfig:
     batch_size: int
     lr: float
-    max_steps: int
     device: str
+    num_epochs: int = 5
+    log_interval: int = 10
+    grad_clip: float | None = None
+    save_dir: str = "checkpoints"
+    train_val_split: float = 0.9
 
 
 @dataclass

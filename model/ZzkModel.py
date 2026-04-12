@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import math
 from config import ModelConfig
+from typing import Optional
 
 class RMSNorm(nn.Module):
     def __init__(self, hidden_size: int, eps:float = 1e-6):
@@ -21,26 +22,77 @@ class InputEmbedding(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.position_embedding = nn.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size
-        )
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        batch_size, seq_len = x.shape
-
-        if seq_len > self.position_embedding.num_embeddings:
-            raise ValueError("seq_len exceeds max_position_embeddings")
-
-        pos = torch.arange(seq_len, device=x.device).unsqueeze(0)
-
         tok_emb = self.token_embedding(x)
-        pos_emb = self.position_embedding(pos)
+        return self.dropout(tok_emb)
 
-        x = tok_emb + pos_emb
-        return self.dropout(x)
 
+def precompute_freqs(
+    dim: int,
+    end: int = int(32 * 1024),
+    rope_base: float = 1e6,
+    rope_scaling: Optional[dict] = None,
+):
+    freqs, attn_factor = (
+        1.0 / (rope_base ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim)),
+        1.0,
+    )
+
+    if rope_scaling is not None:
+        orig_max, factor, beta_fast, beta_slow, attn_factor = (
+            rope_scaling.get("original_max_position_embeddings", 2048),
+            rope_scaling.get("factor", 16),
+            rope_scaling.get("beta_fast", 32.0),
+            rope_scaling.get("beta_slow", 1.0),
+            rope_scaling.get("attention_factor", 1.0),
+        )
+
+        if end / orig_max > 1.0:
+            inv_dim = lambda b: (dim * math.log(orig_max / (b * 2 * math.pi))) / (
+                2 * math.log(rope_base)
+            )
+
+            low, high = (
+                max(math.floor(inv_dim(beta_fast)), 0),
+                min(math.ceil(inv_dim(beta_slow)), dim // 2 - 1),
+            )
+
+            ramp = torch.clamp(
+                (torch.arange(dim // 2, device=freqs.device).float() - low)
+                / max(high - low, 0.001),
+                0,
+                1,
+            )
+
+            freqs = freqs * (1 - ramp + ramp / factor)
+
+    t = torch.arange(end, device=freqs.device)
+    freqs = torch.outer(t, freqs).float()
+
+    freqs_cos = torch.cat([torch.cos(freqs), torch.cos(freqs)], dim=-1) * attn_factor
+    freqs_sin = torch.cat([torch.sin(freqs), torch.sin(freqs)], dim=-1) * attn_factor
+
+    return freqs_cos, freqs_sin
+
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    """
+    q, k: (B, H, T, D)
+    cos, sin: (T, D)
+    """
+    def rotate_half(x):
+        return torch.cat(
+            (-x[..., x.shape[-1] // 2 :], x[..., : x.shape[-1] // 2]), dim=-1
+        )
+
+    cos = cos.unsqueeze(0).unsqueeze(0)  # (1, 1, T, D)
+    sin = sin.unsqueeze(0).unsqueeze(0)  # (1, 1, T, D)
+
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 class SelfAttention(nn.Module):
     def __init__(self, config: ModelConfig):
@@ -60,6 +112,16 @@ class SelfAttention(nn.Module):
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
 
+        freqs_cos, freqs_sin = precompute_freqs(
+            dim=self.head_dim,
+            end=config.max_position_embeddings,
+            rope_base=config.rope_base,
+            rope_scaling=config.rope_scaling
+        )
+
+        self.register_buffer("freqs_cos", freqs_cos, persistent=False)
+        self.register_buffer("freqs_sin", freqs_sin, persistent=False)
+
     def forward(self, x):
         batch_size, seq_len, _ = x.shape
         q = self.q_proj(x)
@@ -69,6 +131,11 @@ class SelfAttention(nn.Module):
         q = q.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
         k = k.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
         v = v.view(batch_size, seq_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
+
+        cos = self.freqs_cos[:seq_len].to(device=x.device, dtype=q.dtype)
+        sin = self.freqs_sin[:seq_len].to(device=x.device, dtype=q.dtype)
+
+        q, k = apply_rotary_pos_emb(q, k, cos, sin)
 
         scores = q @ k.transpose(-1, -2) / math.sqrt(self.head_dim)
         causal_mask = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device))

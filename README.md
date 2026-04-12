@@ -1,102 +1,95 @@
 # ZzkMind
 
-一个基于 PyTorch、从零实现的 Decoder-only 小型大语言模型项目。
+一个基于 PyTorch、从零实现并逐步扩展的 Decoder-only 小型语言模型项目。
+
+---
 
 ## 项目简介
 
-ZzkMind 是一个从零实现的小型大语言模型项目，目标是逐步复现 LLM 的核心组成，包括：
+ZzkMind 是一个面向学习与实践的大语言模型项目，目标不是直接调用现成训练框架，而是从底层开始，逐步实现一个最小可运行的语言模型系统，并在此基础上不断扩展更现代的结构与训练流程。
 
-- tokenizer
-- dataset / dataloader
-- embedding
-- self-attention
-- FFN
-- normalization
-- training
-- generation
-
-当前项目已经完成了字符级 tokenizer、语言模型数据集构造、Input Embedding、Multi-Head Self-Attention、FeedForward、RMSNorm、TransformerBlock，以及模型前向传播测试。
-
-后续将继续补齐训练闭环、文本生成，以及更高级的扩展能力，如 RoPE、MoE、SFT 和 RLHF。
+当前项目已经完成了从 **tokenizer、dataset、embedding、self-attention、FFN、RMSNorm、TransformerBlock** 到 **训练、验证、checkpoint 保存、文本生成** 的完整闭环，并进一步将位置编码从可学习绝对位置编码升级为 **RoPE**，同时保留了 **YaRN scaling** 的兼容接口。
 
 ---
 
 ## 当前进度
 
 ### 已完成
-- [x] 字符级 Tokenizer
-- [x] 语言模型数据集构造（next-token prediction）
-- [x] Input Embedding（Token Embedding + Position Embedding）
+- [x] 字符级 Tokenizer（早期版本）
+- [x] 基于本地 Hugging Face tokenizer 的多语种分词接口
+- [x] Language Modeling Dataset（next-token prediction）
+- [x] Input Embedding
 - [x] Multi-Head Self-Attention
 - [x] Causal Mask
 - [x] FeedForward Network
 - [x] RMSNorm
 - [x] TransformerBlock（Pre-Norm + Residual）
 - [x] ZzkModel 主干组装
-- [x] 前向传播 Shape 测试
+- [x] Forward shape test
+- [x] Tiny corpus overfit
+- [x] Training loop
+- [x] Validation loss
+- [x] Checkpoint save / load
+- [x] Text generation
+- [x] RoPE
+- [x] YaRN-compatible scaling interface
 
 ### 进行中
-- [ ] Training Loop
-- [ ] Cross Entropy Loss
-- [ ] 小数据集过拟合测试
-- [ ] 文本生成（Generate）
+- [ ] 更系统的实验记录与结果对比
+- [ ] 更长文本上的训练与生成测试
+- [ ] 更完整的生成策略对比（greedy / top-k / temperature）
 
 ### 计划中
-- [ ] RoPE
-- [ ] 更好的 Tokenizer（BPE / SentencePiece）
-- [ ] Checkpoint 保存与加载
-- [ ] 评测脚本
-- [ ] MoE
-- [ ] SFT / RLHF
+- [ ] 更规范的实验配置管理
+- [ ] 更完整的日志与可视化
+- [ ] 更大规模语料训练
+- [ ] SwiGLU / weight tying 等结构升级
+- [ ] SFT / 对话式数据训练
+- [ ] 更高级的对齐与后训练方法
 
 ---
 
-## 项目结构
+## 项目目标
+
+这个项目的核心目标有两个：
+
+1. **从零理解大语言模型的基本结构与训练流程**
+2. **在最小可运行版本上逐步演进到更接近现代 LLM 的实现**
+
+相比直接使用成熟框架，本项目更强调：
+
+- 模型结构本身的理解
+- 数据流与张量形状的理解
+- 训练与生成闭环的搭建
+- 从简单版本逐步扩展到更复杂能力
+
+---
+
+## 当前模型结构
+
+当前版本的模型主干为一个最小 Decoder-only Transformer，主要包含：
+
+- Token Embedding
+- Multi-Head Self-Attention
+- RoPE 位置编码
+- RMSNorm
+- FeedForward
+- Residual Connection
+- Final Norm
+- LM Head
+
+整体结构可以概括为：
 
 ```text
-ZzkMind/
-├── config/
-├── configs/
-│   └── tiny.yaml
-├── data/
-├── dataset/
-│   ├── tokenizer.py
-│   ├── loader.py
-│   └── text_dataset.py
-├── model/
-│   └── ZzkModel.py
-├── debug.py
-├── main.py
-└── README.md
-
-
-## 核心模块说明
-
-
-- **CharTokenizer**: builds a character-level vocabulary from raw text and provides `encode/decode`.
-- **LMDataset**: constructs next-token prediction samples using a sliding window.
-- **InputEmbedding**: combines token embedding and positional embedding.
-- **SelfAttention**: implements causal multi-head self-attention.
-- **FeedForward**: position-wise MLP for token-wise nonlinear transformation.
-- **RMSNorm**: normalization over hidden dimensions.
-- **TransformerBlock**: Pre-Norm residual block combining attention and FFN.
-- **ZzkModel**: stacks multiple Transformer blocks and projects to vocabulary logits.
-
-## 一个最小示例
-README 里放一小段最小测试代码会很加分。
-
-```md
-## Example
-
-```python
-import torch
-from config import load_config
-from model.ZzkModel import ZzkModel
-
-config = load_config("configs/tiny.yaml")
-model = ZzkModel(config.model)
-
-idx = torch.randint(0, config.model.vocab_size, (2, 8), dtype=torch.long)
-logits = model(idx)
-
-print(logits.shape)
+Input Tokens
+-> Token Embedding
+-> N x TransformerBlock
+   -> RMSNorm
+   -> Self-Attention + RoPE
+   -> Residual
+   -> RMSNorm
+   -> FFN
+   -> Residual
+-> Final RMSNorm
+-> LM Head
+-> Logits

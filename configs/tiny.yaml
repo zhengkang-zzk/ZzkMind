@@ -4,14 +4,25 @@ model:
   intermediate_size: 256
   num_attention_heads: 4
   num_hidden_layers: 4
-  max_position_embeddings: 128
+  max_position_embeddings: 32
   dropout: 0.1
+
+  rope_base: 1000000.0
+  rope_scaling: 
+    original_max_position_embeddings: 2048
+    factor: 16
+    beta_fast: 32.0
+    beta_slow: 1.0
+    attention_factor: 1.0
 
 train:
   batch_size: 8
   lr: 0.0003
-  max_steps: 1000
   device: "cuda"
+  num_epochs: 5
+  log_interval: 10
+  grad_clip: 1.0
+  save_dir: "checkpoints"
 
 data:
   train_path: "dataset/train.txt"

@@ -1,33 +1,53 @@
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from config import load_config
 from dataset.text_dataset import load_text
 from dataset.tokenizer import CharTokenizer
+from dataset.loader import LMDataset
+from model.ZzkModel import ZzkModel
 
 
 def main():
     config = load_config("configs/tiny.yaml")
 
-    train_text = load_text(config.data.train_path)
-    val_text = load_text(config.data.val_path)
+    text = load_text(config.data.train_path)
+    text = text * 10
+    tokenizer = CharTokenizer(text)
+    encoded = tokenizer.encode(text)
 
-    tokenizer = CharTokenizer(train_text)
+    config.model.vocab_size = tokenizer.vocab_size
 
-    encoded = tokenizer.encode(train_text[:20])
-    decoded = tokenizer.decode(encoded)
+    dataset = LMDataset(
+        tokens=encoded,
+        seq_len=config.model.max_position_embeddings
+    )
 
-    print("=== Config ===")
-    print(config)
+    loader = DataLoader(
+        dataset,
+        batch_size=config.train.batch_size,
+        shuffle=True
+    )
 
-    print("\n=== Train Text Preview ===")
-    print(train_text[:100])
+    model = ZzkModel(config.model)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.train.lr)
+    model.train()
 
-    print("\n=== Val Text Preview ===")
-    print(val_text[:100])
+    for step, (batch_x, batch_y) in enumerate(loader):
+        logits = model(batch_x) # logits (batch_size, seq_len, vocab_size)
 
-    print("\n=== Tokenizer Info ===")
-    print("vocab_size:", tokenizer.vocab_size)
-    print("encoded:", encoded)
-    print("decoded:", decoded)
+        loss = F.cross_entropy(
+            logits.view(-1, logits.size(-1)),
+            batch_y.view(-1)
+        )
 
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        print(f"step={step}, loss={loss.item():.4f}")
+        if step >= 20:
+            break
 
 if __name__ == "__main__":
     main()
