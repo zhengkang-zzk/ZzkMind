@@ -5,4 +5,4 @@ out/
 checkpoints/
 *.pt
 *.pth
-dataset/xlm-roberta-base
+.gitignore
