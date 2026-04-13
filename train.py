@@ -114,6 +114,7 @@ def main():
     num_epochs = getattr(config.train, "num_epochs", 5)
     log_interval = getattr(config.train, "log_interval", 10)
     grad_clip = getattr(config.train, "grad_clip", None)
+    moe_aux_loss_weight = getattr(config.train, "moe_aux_loss_weight", 0.01)
 
     save_dir = Path(getattr(config.train, "save_dir", "checkpoints"))
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -127,17 +128,21 @@ def main():
     for epoch in range(num_epochs):
         model.train()
         train_running_loss = 0.0
+        aux_running_loss = 0.0
 
         for step, (batch_x, batch_y) in enumerate(train_loader):
             batch_x = batch_x.to(device)
             batch_y = batch_y.to(device)
 
-            logits = model(batch_x)  # (B, T, vocab_size)
+            # aux_loss 是 MoE 路由的负载均衡约束；dense FFN 时它恒为 0。
+            logits, aux_loss = model(batch_x, return_aux_loss=True)  # (B, T, vocab_size)
 
-            loss = F.cross_entropy(
+            lm_loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),
                 batch_y.view(-1)
             )
+            # 总 loss = 语言模型 loss + 小权重的 MoE 辅助 loss，避免 router 只偏爱少数专家。
+            loss = lm_loss + moe_aux_loss_weight * aux_loss
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -147,12 +152,14 @@ def main():
 
             optimizer.step()
 
-            train_running_loss += loss.item()
+            train_running_loss += lm_loss.item()
+            aux_running_loss += aux_loss.item()
             global_step += 1
 
 
         # 10. 统计 train loss
         avg_train_loss = train_running_loss / len(train_loader)
+        avg_aux_loss = aux_running_loss / len(train_loader)
         train_ppl = math.exp(avg_train_loss) if avg_train_loss < 20 else float("inf")
 
         # 11. 计算 val loss
@@ -163,7 +170,8 @@ def main():
         print(
             f"[epoch {epoch}] "
             f"train_loss={avg_train_loss:.6f}, train_ppl={train_ppl:.6f} | "
-            f"val_loss={avg_val_loss:.6f}, val_ppl={val_ppl:.6f}"
+            f"val_loss={avg_val_loss:.6f}, val_ppl={val_ppl:.6f} | "
+            f"moe_aux_loss={avg_aux_loss:.6f}"
         )
 
         # 12. 保存 last checkpoint

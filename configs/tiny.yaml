@@ -15,6 +15,13 @@ model:
     beta_slow: 1.0
     attention_factor: 1.0
 
+  use_moe: true
+  moe_num_experts: 4
+  moe_top_k: 2
+  moe_expert_capacity:
+  moe_capacity_factor: 1.25
+  moe_use_shared_expert: true
+
 train:
   batch_size: 8
   lr: 0.0003
@@ -23,6 +30,7 @@ train:
   log_interval: 10
   grad_clip: 1.0
   save_dir: "checkpoints"
+  moe_aux_loss_weight: 0.01
 
 data:
   train_path: "dataset/train.txt"

@@ -63,6 +63,7 @@ def sample_next_token(
     return torch.multinomial(probs, num_samples=1)
 
 
+@torch.no_grad()
 def generate(
     model,
     idx: torch.Tensor,
@@ -74,21 +75,36 @@ def generate(
 ):
     model.eval()
 
-    with torch.no_grad():
-        for _ in range(max_new_tokens):
-            idx_cond = idx[:, -max_position_embeddings:]
+    # 重要：你当前实现的 KV cache 是“累计缓存”版本，
+    # 不是滑动窗口版本，所以总长度不能超过 max_position_embeddings
+    if idx.size(1) >= max_position_embeddings:
+        return idx
 
-            logits = model(idx_cond)      # (1, T, vocab_size)
-            logits = logits[:, -1, :]     # (1, vocab_size)
+    # 先把 prompt 整段送进去，建立初始 cache
+    logits, past_key_values = model(idx, past_key_values=None, use_cache=True)
+    logits = logits[:, -1, :]   # 只取最后一个位置预测下一个 token
 
-            next_token = sample_next_token(
-                logits=logits,
-                temperature=temperature,
-                greedy=greedy,
-                top_k=top_k,
-            )
+    for _ in range(max_new_tokens):
+        next_token = sample_next_token(
+            logits=logits,
+            temperature=temperature,
+            greedy=greedy,
+            top_k=top_k,
+        )  # shape: (B, 1)
 
-            idx = torch.cat([idx, next_token], dim=1)
+        idx = torch.cat([idx, next_token], dim=1)
+
+        # 达到最大上下文长度就停止
+        if idx.size(1) >= max_position_embeddings:
+            break
+
+        # 后续只喂一个 token，同时传入 cache
+        logits, past_key_values = model(
+            next_token,
+            past_key_values=past_key_values,
+            use_cache=True,
+        )
+        logits = logits[:, -1, :]
 
     return idx
 
@@ -166,7 +182,7 @@ def main():
         out = generate(
             model=model,
             idx=idx,
-            max_new_tokens=80,
+            max_new_tokens=20,
             max_position_embeddings=config.model.max_position_embeddings,
             temperature=0.8,
             greedy=False,

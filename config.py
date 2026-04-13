@@ -16,6 +16,13 @@ class ModelConfig:
     rope_base: float 
     rope_scaling: Optional[dict]
 
+    use_moe: bool = False
+    moe_num_experts: int = 4
+    moe_top_k: int = 2
+    moe_expert_capacity: int | None = None
+    moe_capacity_factor: float = 1.25
+    moe_use_shared_expert: bool = True
+
 
 @dataclass
 class TrainConfig:
@@ -27,6 +34,7 @@ class TrainConfig:
     grad_clip: float | None = None
     save_dir: str = "checkpoints"
     train_val_split: float = 0.9
+    moe_aux_loss_weight: float = 0.01
 
 
 @dataclass
