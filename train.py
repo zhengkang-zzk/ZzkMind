@@ -1,3 +1,12 @@
+# 兼容旧命令：如果用户仍然运行 train.py，就直接转到新的预训练入口。
+# 下面的旧训练代码不会执行；后续确认没有占用后可以删除这个文件。
+from train_pretrain import main as _pretrain_main
+
+
+if __name__ == "__main__":
+    _pretrain_main()
+    raise SystemExit
+
 import math
 from pathlib import Path
 
@@ -114,7 +123,17 @@ def main():
     num_epochs = getattr(config.train, "num_epochs", 5)
     log_interval = getattr(config.train, "log_interval", 10)
     grad_clip = getattr(config.train, "grad_clip", None)
-    moe_aux_loss_weight = getattr(config.train, "moe_aux_loss_weight", 0.01)
+    moe_aux_loss_weight = getattr(config.train, "moe_aux_loss_weight", 0.0001)
+    print(
+        "moe:",
+        getattr(config.model, "use_moe", False),
+        "| num_experts:",
+        getattr(config.model, "moe_num_experts", 0),
+        "| top_k:",
+        getattr(config.model, "moe_top_k", 0),
+        "| aux_weight:",
+        moe_aux_loss_weight,
+    )
 
     save_dir = Path(getattr(config.train, "save_dir", "checkpoints"))
     save_dir.mkdir(parents=True, exist_ok=True)

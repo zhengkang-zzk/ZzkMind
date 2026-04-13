@@ -5,3 +5,7 @@ out/
 checkpoints/
 *.pt
 *.pth
+
+# Local pretraining datasets are large and should not be uploaded to GitHub.
+dataset/*.jsonl
+dataset/**/*.jsonl

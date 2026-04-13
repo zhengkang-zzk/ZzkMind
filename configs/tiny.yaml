@@ -4,7 +4,7 @@ model:
   intermediate_size: 256
   num_attention_heads: 4
   num_hidden_layers: 4
-  max_position_embeddings: 32
+  max_position_embeddings: 128
   dropout: 0.1
 
   rope_base: 1000000.0
@@ -26,12 +26,28 @@ train:
   batch_size: 8
   lr: 0.0003
   device: "cuda"
+  # num_epochs 是目标总 epoch 数；从 checkpoint 续训时需要调大到超过 checkpoint epoch。
   num_epochs: 5
+  # 每隔多少个 step 打印一次 loss 和 ETA。
   log_interval: 10
   grad_clip: 1.0
   save_dir: "checkpoints"
+  # MoE 负载均衡辅助损失权重。
   moe_aux_loss_weight: 0.01
+  # 为空表示从头训练；可填 "checkpoints/interrupted.pt" 继续训练。
+  resume_from:
+  # eval.py 最多评估多少个 batch；为空表示完整验证。
+  eval_max_batches: 100
 
 data:
-  train_path: "dataset/train.txt"
+  # 本地 JSONL 不上传 GitHub，字段由 jsonl_text_field 指定。
+  train_path: "dataset/pretrain_t2t_mini.jsonl"
   val_path: "dataset/val.txt"
+  jsonl_text_field: "text"
+  # 真实预训练建议为 1；tiny overfit 才需要调大。
+  repeat: 1
+  # 先限制读取规模，确认训练闭环后再逐步调大。
+  max_records: 500
+  max_chars: 500000
+  # stride=max_position_embeddings 时基本是不重叠 block，训练效率更高。
+  stride: 128
